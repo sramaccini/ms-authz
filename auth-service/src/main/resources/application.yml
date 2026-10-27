@@ -1,0 +1,48 @@
+server:
+  port: 8081
+  shutdown: graceful
+
+spring:
+  application:
+    name: auth-service
+  threads:
+    virtual:
+      enabled: true # Virtual Threads (Java 21+): Tomcat e JDBC girano su thread virtuali
+  datasource:
+    url: ${AUTH_DB_URL:jdbc:postgresql://localhost:5432/auth_db}
+    username: ${AUTH_DB_USER:auth_user}
+    password: ${AUTH_DB_PASSWORD} # nessun default: va fornita da env/secret manager
+    hikari:
+      maximum-pool-size: ${AUTH_DB_POOL_SIZE:20} # con i virtual threads il limite reale e' il pool DB
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${IAM_ISSUER_URI:http://localhost:8180/realms/enterprise}
+          # Consigliato in produzione: validare l'audience (richiede audience mapper sullo IAM)
+          # audiences: auth-service
+
+auth:
+  enrich:
+    # Claim del JWT che contiene lo username dell'utente
+    username-claim: preferred_username
+    # Authority che abilita un client di servizio ad arricchire qualunque username
+    # (scope OAuth2 "auth:enrich" -> authority "SCOPE_auth:enrich")
+    service-authority: SCOPE_auth:enrich
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.enterprise.auth: INFO
