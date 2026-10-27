@@ -8,6 +8,14 @@ spring:
     # (V2, V3, ...) arrivano "fuori ordine". Solo in sviluppo: in produzione i seed non esistono.
     out-of-order: true
 
+springdoc:
+  api-docs:
+    enabled: true
+
+auth:
+  openapi:
+    cors-allowed-origins: http://localhost:8090 # Swagger UI di docker compose
+
 logging:
   level:
     com.enterprise.auth: DEBUG

@@ -18,14 +18,33 @@ Il `pom.xml` nella radice è solo un aggregatore: `mvn install` dalla radice com
    `HttpOnly; Secure; SameSite=Strict`; i token dello IAM vengono scartati.
 4. Ogni chiamata `/api/**` instradata dal gateway: header interni ripuliti, verifica Origin sulle richieste
    non idempotenti, verifica sessione su Redis, inoltro con `X-Session-ID`.
-5. `GET /bff/session` restituisce il contesto utente alla UI; `POST /bff/logout` cancella la chiave Redis.
+5. `GET /bff/session` restituisce il contesto utente alla UI.
+6. `POST /bff/logout` (con `Origin` ammessa) cancella la sessione su Redis e risponde
+   `200 {"logout_url": "..."}`: la SPA naviga a quell'URL (`window.location`) per chiudere anche la sessione
+   SSO sullo IAM (OIDC RP-Initiated Logout con `id_token_hint`), che poi rimanda a `FRONTEND_URL/`.
 
 Errori di login → redirect a `FRONTEND_URL/login-error?error=access_denied|tenant_selection_required|auth_service_unavailable|login_failed`.
 
 ## Amministrazione di ruoli e permessi
 
-Contratto per la SPA: [docs/openapi-admin.yaml](docs/openapi-admin.yaml). Tutte le chiamate passano dal BFF
-con il cookie di sessione; l'auth-service le autentica con `X-Session-ID` tramite lo starter.
+Definizione OpenAPI **generata dal codice** dall'auth-service (springdoc), solo per `/api/v1/admin/**`:
+
+- `GET http://localhost:8081/v3/api-docs` (JSON) e `/v3/api-docs.yaml` (YAML), utilizzabili anche per generare
+  il client della SPA. Il server indicato nella definizione è il BFF (`OPENAPI_SERVER_URL`, default
+  `http://localhost:8080`), perché la SPA chiama sempre tramite il BFF con il cookie di sessione.
+- Attiva nel profilo `dev`; altrove è disattivata (`OPENAPI_DOCS_ENABLED=true` per abilitarla).
+- **Export automatico nel build**: `mvn verify` (o `install`) dell'auth-service avvia il servizio con PostgreSQL e
+  Redis in container (`TestAuthServiceApplication`, serve Docker), scarica la definizione e la scrive in
+  `auth-service/target/openapi/authz-admin-openapi-spec.json`, poi lo arresta e la copia in
+  [docs/authz-admin-openapi-spec.json](docs/authz-admin-openapi-spec.json) (versionata: committarla quando cambia). Saltato con `-DskipTests` o
+  `-Dopenapi.export.skip=true`. Lo stesso launcher avvia il servizio senza docker compose:
+  `mvn spring-boot:test-run` dalla cartella `auth-service`.
+- Swagger UI su http://localhost:8090 (servizio `swagger-ui` di docker compose) legge la definizione dal vivo:
+  solo consultazione, il "Try it out" non passa dal BFF.
+- La revoca delle sessioni è un endpoint del BFF e non compare nella definizione generata: vedi sotto.
+
+Tutte le chiamate passano dal BFF con il cookie di sessione; l'auth-service le autentica con `X-Session-ID`
+tramite lo starter.
 
 | Chi | Permesso | Può |
 |---|---|---|
@@ -37,6 +56,32 @@ con il cookie di sessione; l'auth-service le autentica con `X-Session-ID` tramit
 - Le modifiche valgono **dal login successivo** dell'utente. Per un effetto immediato:
   `DELETE /bff/admin/users/{username}/sessions` (l'utente rientra con l'SSO dello IAM).
 - Ogni modifica è registrata in `rbac_audit` (chi, quando, stato prima e dopo).
+
+### Revoca delle sessioni (endpoint del BFF)
+
+`DELETE /bff/admin/users/{username}/sessions` chiude subito le sessioni di un utente (specifica par. 5), ad
+esempio dopo averlo disattivato o se l'account è compromesso. L'utente deve rifare il login; i servizi di dominio
+smettono di accettare la sessione entro il TTL della loro cache locale (5 s).
+
+- **Autenticazione**: cookie `SESSION_ID` dell'amministratore e header `Origin` ammesso (come ogni richiesta non
+  idempotente verso il BFF).
+- **Ambito**: con `session:revoke` vengono revocate solo le sessioni dell'utente aperte sul tenant della sessione
+  dell'amministratore; con `session:revoke-global` tutte.
+- **`username`**: `^[A-Za-z0-9._@-]{1,150}$`.
+
+| Esito | Significato |
+|---|---|
+| `200` | `{"username": "...", "tenant_id": "TENANT_A" \| null, "revoked_sessions": 2}`; `tenant_id` è `null` per la revoca globale. `revoked_sessions` può essere `0` |
+| `400` | `username` non valido |
+| `401` | sessione dell'amministratore assente o scaduta |
+| `403` | permesso mancante oppure `Origin` non ammessa |
+
+Esempio dalla SPA (stessa origine del BFF: il browser invia cookie e `Origin` da solo):
+
+```js
+const res = await fetch(`/bff/admin/users/${encodeURIComponent(username)}/sessions`, { method: 'DELETE' });
+const { revoked_sessions } = await res.json();
+```
 
 ## Servizi di dominio: uso dello starter
 
@@ -102,6 +147,9 @@ Variabili principali: `IAM_ISSUER_URI`, `IAM_CLIENT_ID`, `IAM_CLIENT_SECRET`, `A
   e i servizi a valle (auth-service compreso, per `/api/v1/admin/**`) non devono essere raggiungibili dall'esterno.
 - **TTL assoluto** (30 min, no sliding): valutare il rinnovo su attività e un limite di durata massima.
 - **Audit RBAC**: definire conservazione e accesso al registro `rbac_audit` (GDPR).
-- **Audience JWT** nell'auth-service: abilitare `spring.security.oauth2.resourceserver.jwt.audiences`.
-- **Logout IAM** (RP-initiated logout) non incluso: oggi il logout chiude solo la sessione applicativa.
+- **Audience JWT**: l'auth-service accetta solo token con `aud` = `auth-service` (`AUTH_JWT_AUDIENCE`). Sullo IAM
+  serve un audience mapper su ogni client che lo chiama (nel realm demo: `bff-gateway`).
+- **Logout IAM**: il post logout redirect URI (`FRONTEND_URL/`) va registrato sul client dello IAM. Il logout
+  avviato altrove (altra applicazione, console IAM) non chiude le sessioni del BFF: per questo serve il
+  back-channel logout (non incluso).
 - **Primo amministratore globale** in produzione: SQL una tantum (commento in fondo a `V2__rbac_administration.sql`).

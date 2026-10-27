@@ -29,10 +29,20 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${IAM_ISSUER_URI:http://localhost:8180/realms/enterprise}
-          # Consigliato in produzione: validare l'audience (richiede audience mapper sullo IAM)
-          # audiences: auth-service
+          # Solo token emessi PER questo servizio (claim aud): lo IAM la aggiunge con un audience mapper sul
+          # client (bff-gateway e gli eventuali client di servizio). Un ID token (aud = client id) viene rifiutato.
+          audiences: ${AUTH_JWT_AUDIENCE:auth-service}
+
+# Definizione OpenAPI generata dal codice (GET /v3/api-docs): disattivata per default, attiva nel profilo dev
+springdoc:
+  api-docs:
+    enabled: ${OPENAPI_DOCS_ENABLED:false}
+  paths-to-match: /api/v1/admin/**
 
 auth:
+  openapi:
+    # Le chiamate della SPA passano dal BFF: e' questo il server da indicare nella definizione
+    server-url: ${OPENAPI_SERVER_URL:http://localhost:8080}
   enrich:
     # Claim del JWT che contiene lo username dell'utente
     username-claim: preferred_username

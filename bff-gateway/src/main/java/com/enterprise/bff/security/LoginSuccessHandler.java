@@ -15,6 +15,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientRepository;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.web.server.WebFilterExchange;
 import org.springframework.security.web.server.authentication.ServerAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
@@ -34,7 +35,8 @@ import java.util.List;
  * 3. genera il SESSION_ID e salva la sessione su Redis con TTL;
  * 4. imposta il cookie HttpOnly/Secure/SameSite=Strict e rimanda al frontend.
  * Lo stato temporaneo del flusso OAuth2 (WebSession, authorized client) viene poi eliminato:
- * i token dello IAM non restano nel BFF.
+ * access token e refresh token dello IAM non restano nel BFF. Resta solo l'ID token, in una chiave
+ * riservata al BFF, per il logout sullo IAM (id_token_hint).
  */
 @Component
 public class LoginSuccessHandler implements ServerAuthenticationSuccessHandler {
@@ -93,14 +95,14 @@ public class LoginSuccessHandler implements ServerAuthenticationSuccessHandler {
                         username,
                         t.getT2().isEmpty() ? null : t.getT2(),
                         t.getT1().getAccessToken().getTokenValue()))
-                .flatMap(enriched -> createSession(exchange, enriched))
+                .flatMap(enriched -> createSession(exchange, enriched, idToken(oauth)))
                 .then(Mono.defer(() -> cleanup(exchange, registrationId, oauth)))
                 .then(Mono.defer(() -> redirects.toSuccess(exchange)))
                 .onErrorResume(error -> cleanup(exchange, registrationId, oauth)
                         .then(redirects.toFailure(exchange, mapError(username, error))));
     }
 
-    private Mono<Void> createSession(ServerWebExchange exchange, EnrichResponse enriched) {
+    private Mono<Void> createSession(ServerWebExchange exchange, EnrichResponse enriched, String idToken) {
         Instant now = clock.instant();
         Instant expiresAt = now.plus(properties.session().ttl());
         String sessionId = idGenerator.newSessionId();
@@ -123,10 +125,16 @@ public class LoginSuccessHandler implements ServerAuthenticationSuccessHandler {
 
         return dropPrevious
                 .then(sessionStore.save(session, properties.session().ttl()))
+                .then(idToken == null ? Mono.<Void>empty()
+                        : sessionStore.saveIdToken(sessionId, idToken, properties.session().ttl()))
                 .doOnSuccess(v -> {
                     exchange.getResponse().addCookie(cookies.create(sessionId));
                     log.info("Sessione creata per utente={} tenant={}", enriched.username(), enriched.tenantId());
                 });
+    }
+
+    private static String idToken(OAuth2AuthenticationToken oauth) {
+        return oauth.getPrincipal() instanceof OidcUser oidc ? oidc.getIdToken().getTokenValue() : null;
     }
 
     /** Rimuove token IAM e WebSession usata solo per lo state/nonce del flusso OAuth2. */

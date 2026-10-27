@@ -13,6 +13,8 @@ import com.enterprise.auth.admin.AdminApi.UserCreateRequest;
 import com.enterprise.auth.admin.AdminApi.UserUpdateRequest;
 import com.enterprise.auth.admin.AdminApi.UserView;
 import com.enterprise.session.context.SessionContext;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
@@ -34,10 +36,12 @@ import java.util.List;
 
 /**
  * API di amministrazione RBAC per il frontend, raggiunta tramite il BFF (rotta /api/v1/admin/**)
- * e autenticata con la sessione del BFF (X-Session-ID). Contratto: docs/openapi-admin.yaml.
+ * e autenticata con la sessione del BFF (X-Session-ID). Contratto generato da springdoc: GET /v3/api-docs,
+ * esportato dal build in docs/authz-admin-openapi-spec.json.
  */
 @RestController
 @RequestMapping("/api/v1/admin")
+@Tag(name = "Amministrazione RBAC")
 @Validated
 public class RbacAdminController {
 
@@ -48,16 +52,19 @@ public class RbacAdminController {
     }
 
     @GetMapping("/permissions")
+    @Operation(summary = "Catalogo dei permessi (sola lettura)")
     public List<PermissionView> permissions() {
         return service.permissions();
     }
 
     @GetMapping("/roles")
+    @Operation(summary = "Ruoli con i relativi permessi")
     public List<RoleView> roles() {
         return service.roles();
     }
 
     @PostMapping("/roles")
+    @Operation(summary = "Crea un ruolo (solo amministratore globale)")
     @ResponseStatus(HttpStatus.CREATED)
     public RoleView createRole(@AuthenticationPrincipal SessionContext session,
                                @Valid @RequestBody RoleCreateRequest request) {
@@ -65,6 +72,7 @@ public class RbacAdminController {
     }
 
     @PutMapping("/roles/{code}")
+    @Operation(summary = "Sostituisce descrizione e permessi di un ruolo non di sistema (solo globale, con version)")
     public RoleView updateRole(@AuthenticationPrincipal SessionContext session,
                                @PathVariable @Pattern(regexp = AdminApi.ROLE_CODE) String code,
                                @Valid @RequestBody RoleUpdateRequest request) {
@@ -72,6 +80,7 @@ public class RbacAdminController {
     }
 
     @DeleteMapping("/roles/{code}")
+    @Operation(summary = "Elimina un ruolo non assegnato e non di sistema (solo globale)")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteRole(@AuthenticationPrincipal SessionContext session,
                            @PathVariable @Pattern(regexp = AdminApi.ROLE_CODE) String code) {
@@ -79,11 +88,13 @@ public class RbacAdminController {
     }
 
     @GetMapping("/tenants")
+    @Operation(summary = "Tenant gestibili dall'amministratore")
     public List<TenantView> tenants(@AuthenticationPrincipal SessionContext session) {
         return service.tenants(AdminScope.of(session));
     }
 
     @PostMapping("/tenants")
+    @Operation(summary = "Crea un tenant (solo amministratore globale)")
     @ResponseStatus(HttpStatus.CREATED)
     public TenantView createTenant(@AuthenticationPrincipal SessionContext session,
                                    @Valid @RequestBody TenantCreateRequest request) {
@@ -91,6 +102,7 @@ public class RbacAdminController {
     }
 
     @GetMapping("/tenants/{tenant}/users")
+    @Operation(summary = "Utenti con almeno un ruolo sul tenant, ordinati per username")
     public List<TenantUserView> tenantUsers(@AuthenticationPrincipal SessionContext session,
                                             @PathVariable @Pattern(regexp = AdminApi.TENANT_CODE) String tenant,
                                             @RequestParam(defaultValue = "50") int limit,
@@ -99,6 +111,7 @@ public class RbacAdminController {
     }
 
     @PutMapping("/tenants/{tenant}/users/{username}/roles")
+    @Operation(summary = "Sostituisce i ruoli dell'utente sul tenant (lista vuota = nessun ruolo)")
     public UserView replaceUserRoles(@AuthenticationPrincipal SessionContext session,
                                      @PathVariable @Pattern(regexp = AdminApi.TENANT_CODE) String tenant,
                                      @PathVariable @Pattern(regexp = AdminApi.USERNAME) String username,
@@ -107,12 +120,14 @@ public class RbacAdminController {
     }
 
     @GetMapping("/users/{username}")
+    @Operation(summary = "Utente con le assegnazioni visibili all'amministratore")
     public UserView user(@AuthenticationPrincipal SessionContext session,
                          @PathVariable @Pattern(regexp = AdminApi.USERNAME) String username) {
         return service.user(AdminScope.of(session), username);
     }
 
     @PostMapping("/users")
+    @Operation(summary = "Censisce un utente gia' presente nello IAM")
     @ResponseStatus(HttpStatus.CREATED)
     public UserView createUser(@AuthenticationPrincipal SessionContext session,
                                @Valid @RequestBody UserCreateRequest request) {
@@ -120,6 +135,7 @@ public class RbacAdminController {
     }
 
     @PatchMapping("/users/{username}")
+    @Operation(summary = "Attiva/disattiva o cambia email (solo globale, non su se stessi)")
     public UserView updateUser(@AuthenticationPrincipal SessionContext session,
                                @PathVariable @Pattern(regexp = AdminApi.USERNAME) String username,
                                @Valid @RequestBody UserUpdateRequest request) {
@@ -127,6 +143,7 @@ public class RbacAdminController {
     }
 
     @GetMapping("/audit")
+    @Operation(summary = "Registro delle modifiche, piu' recenti prima (il delegato vede solo il proprio tenant)")
     public List<AuditEntry> audit(@AuthenticationPrincipal SessionContext session,
                                   @RequestParam(required = false) @Pattern(regexp = AdminApi.TENANT_CODE) String tenant,
                                   @RequestParam(defaultValue = "50") int limit,

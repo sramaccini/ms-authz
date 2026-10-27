@@ -76,6 +76,8 @@ bff:
   frontend:
     login-success-url: ${FRONTEND_URL:http://localhost:4200}/
     login-failure-url: ${FRONTEND_URL:http://localhost:4200}/login-error
+    # Destinazione dopo il logout sullo IAM: deve essere tra i "post logout redirect URI" del client
+    post-logout-url: ${FRONTEND_URL:http://localhost:4200}/
     # Origini ammesse per le richieste non idempotenti (difesa CSRF aggiuntiva a SameSite=Strict)
     allowed-origins:
       - ${FRONTEND_URL:http://localhost:4200}

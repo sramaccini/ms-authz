@@ -2,6 +2,7 @@ package com.enterprise.bff.web;
 
 import com.enterprise.bff.TestProperties;
 import com.enterprise.bff.config.BffProperties;
+import com.enterprise.bff.security.IamLogout;
 import com.enterprise.bff.security.OriginPolicy;
 import com.enterprise.bff.session.SessionCookies;
 import com.enterprise.bff.session.SessionIdGenerator;
@@ -28,26 +29,44 @@ class SessionControllerTest {
 
     private SessionStore sessionStore;
     private SessionController controller;
+    private IamLogout iamLogout;
 
     @BeforeEach
     void setUp() {
         BffProperties properties = TestProperties.bff();
         sessionStore = mock(SessionStore.class);
+        iamLogout = mock(IamLogout.class);
+        when(iamLogout.logoutUrl(any())).thenAnswer(inv -> Mono.just("http://iam.test/logout?hint=" + inv.getArgument(0)));
         controller = new SessionController(sessionStore, new SessionCookies(properties), new SessionIdGenerator(),
-                new OriginPolicy(properties));
+                new OriginPolicy(properties), iamLogout);
     }
 
     @Test
-    void logoutFromAllowedOriginRevokesSessionAndExpiresCookie() {
+    void logoutFromAllowedOriginRevokesSessionAndReturnsIamLogoutUrl() {
+        when(sessionStore.takeIdToken(SESSION_ID)).thenReturn(Mono.just("id-token"));
         when(sessionStore.delete(SESSION_ID)).thenReturn(Mono.just(true));
         MockServerWebExchange exchange = logoutRequest(TestProperties.FRONTEND);
 
         StepVerifier.create(controller.logout(exchange))
-                .assertNext(response -> assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT))
+                .assertNext(response -> {
+                    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+                    assertThat(response.getBody().logoutUrl()).isEqualTo("http://iam.test/logout?hint=id-token");
+                })
                 .verifyComplete();
 
         verify(sessionStore).delete(SESSION_ID);
         assertThat(exchange.getResponse().getCookies().getFirst("SESSION_ID").getMaxAge()).isZero();
+    }
+
+    @Test
+    void logoutWithoutSessionStillReturnsIamLogoutUrl() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/bff/logout")
+                .header("Origin", TestProperties.FRONTEND));
+
+        StepVerifier.create(controller.logout(exchange))
+                .assertNext(response -> assertThat(response.getBody().logoutUrl()).endsWith("hint=null"))
+                .verifyComplete();
+        verify(sessionStore, never()).delete(any());
     }
 
     @Test

@@ -26,11 +26,13 @@ public record BffProperties(@Valid Oidc oidc, @Valid Session session, @Valid Fro
                           @DefaultValue("true") boolean cookieSecure,
                           @DefaultValue("30m") @NotNull Duration ttl,
                           @DefaultValue("session:") @NotBlank String redisKeyPrefix,
-                          @DefaultValue("user_sessions:") @NotBlank String userIndexPrefix) {
+                          @DefaultValue("user_sessions:") @NotBlank String userIndexPrefix,
+                          @DefaultValue("bff:id_token:") @NotBlank String idTokenKeyPrefix) {
     }
 
     public record Frontend(@NotNull URI loginSuccessUrl,
                            @NotNull URI loginFailureUrl,
+                           @NotNull URI postLogoutUrl,
                            @DefaultValue List<String> allowedOrigins) {
     }
 

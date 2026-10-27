@@ -18,8 +18,9 @@ public final class TestProperties {
         return new BffProperties(
                 new BffProperties.Oidc("iam", "preferred_username"),
                 new BffProperties.Session("SESSION_ID", null, true, Duration.ofMinutes(30), "session:",
-                        "user_sessions:"),
+                        "user_sessions:", "bff:id_token:"),
                 new BffProperties.Frontend(URI.create(FRONTEND + "/"), URI.create(FRONTEND + "/login-error"),
+                        URI.create(FRONTEND + "/"),
                         List.of(FRONTEND)),
                 new BffProperties.AuthService("http://localhost:8081", Duration.ofSeconds(3)),
                 new BffProperties.LoginRateLimit(true, 20, Duration.ofMinutes(1), "ratelimit:login:"));

@@ -20,12 +20,14 @@ public class SessionStore {
     private final JsonMapper jsonMapper;
     private final String keyPrefix;
     private final String userIndexPrefix;
+    private final String idTokenKeyPrefix;
 
     public SessionStore(ReactiveStringRedisTemplate redis, JsonMapper jsonMapper, BffProperties properties) {
         this.redis = redis;
         this.jsonMapper = jsonMapper;
         this.keyPrefix = properties.session().redisKeyPrefix();
         this.userIndexPrefix = properties.session().userIndexPrefix();
+        this.idTokenKeyPrefix = properties.session().idTokenKeyPrefix();
     }
 
     public Mono<Void> save(SessionData session, Duration ttl) {
@@ -50,8 +52,25 @@ public class SessionStore {
         return redis.hasKey(key(sessionId));
     }
 
+    /** Elimina la sessione e l'ID token associato (due chiavi distinte: compatibile con Redis Cluster). */
     public Mono<Boolean> delete(String sessionId) {
-        return redis.delete(key(sessionId)).map(deleted -> deleted > 0);
+        return redis.delete(idTokenKey(sessionId))
+                .then(redis.delete(key(sessionId)))
+                .map(deleted -> deleted > 0);
+    }
+
+    /**
+     * ID token dello IAM, conservato solo per il logout sullo IAM (id_token_hint) in una chiave letta
+     * esclusivamente dal BFF: non fa parte del contratto session:<id> condiviso con i servizi di dominio.
+     * Access token e refresh token non vengono conservati.
+     */
+    public Mono<Void> saveIdToken(String sessionId, String idToken, Duration ttl) {
+        return redis.opsForValue().set(idTokenKey(sessionId), idToken, ttl).then();
+    }
+
+    /** Legge e cancella l'ID token (GETDEL): usato una sola volta, al logout. */
+    public Mono<String> takeIdToken(String sessionId) {
+        return redis.opsForValue().getAndDelete(idTokenKey(sessionId));
     }
 
     /**
@@ -72,6 +91,10 @@ public class SessionStore {
 
     private String key(String sessionId) {
         return keyPrefix + sessionId;
+    }
+
+    private String idTokenKey(String sessionId) {
+        return idTokenKeyPrefix + sessionId;
     }
 
     private String indexKey(String username) {

@@ -46,6 +46,8 @@ public class SecurityConfig {
                 // Error dispatch verso /error: lo status originale resta quello deciso dalla catena che l'ha prodotto
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                 .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                // Definizione OpenAPI: esiste solo se springdoc.api-docs.enabled=true (sviluppo)
+                .requestMatchers("/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**").permitAll()
                 .anyRequest().authenticated())
             .oauth2ResourceServer(rs -> rs.jwt(Customizer.withDefaults()))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

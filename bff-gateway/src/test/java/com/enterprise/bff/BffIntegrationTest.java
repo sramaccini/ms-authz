@@ -83,6 +83,7 @@ class BffIntegrationTest {
                     .authorizationUri("http://iam.test/auth")
                     .tokenUri("http://iam.test/token")
                     .jwkSetUri("http://iam.test/certs")
+                    .providerConfigurationMetadata(Map.of("end_session_endpoint", "http://iam.test/logout"))
                     .userNameAttributeName("preferred_username")
                     .build());
         }
@@ -170,14 +171,23 @@ class BffIntegrationTest {
     @Test
     void logoutRequiresAllowedOriginAndRevokesSession() {
         String id = newSession("TENANT_A");
+        sessionStore.saveIdToken(id, "eyJ.id.token", Duration.ofMinutes(30)).block();
 
         client.post().uri("/bff/logout").cookie("SESSION_ID", id).header(HttpHeaders.ORIGIN, "https://evil.example")
                 .exchange().expectStatus().isForbidden();
         assertThat(redis.hasKey("session:" + id).block()).isTrue();
 
         client.post().uri("/bff/logout").cookie("SESSION_ID", id).header(HttpHeaders.ORIGIN, TestProperties.FRONTEND)
-                .exchange().expectStatus().isNoContent();
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().cacheControl(org.springframework.http.CacheControl.noStore())
+                .expectBody()
+                .jsonPath("$.logout_url").value(url -> assertThat((String) url)
+                        .startsWith("http://iam.test/logout?")
+                        .contains("client_id=bff-gateway", "id_token_hint=eyJ.id.token", "post_logout_redirect_uri="));
+
         assertThat(redis.hasKey("session:" + id).block()).isFalse();
+        assertThat(redis.hasKey("bff:id_token:" + id).block()).isFalse();
     }
 
     @Test
@@ -257,6 +267,7 @@ class BffIntegrationTest {
 
         assertThat(redis.hasKey("session:" + onTenantA).block()).isFalse();
         assertThat(redis.hasKey("session:" + onTenantB).block()).isFalse();
+        assertThat(redis.hasKey("bff:id_token:" + onTenantA).block()).as("ID token revocato con la sessione").isFalse();
         assertThat(redis.opsForSet().size("user_sessions:mario.rossi").block()).isZero();
     }
 
@@ -293,6 +304,7 @@ class BffIntegrationTest {
         sessionStore.save(new SessionData(id, username, username + "@example.org", tenant,
                 List.of("DOCTOR"), List.of(permissions), now.toString(), now.plusSeconds(1800).toString()),
                 Duration.ofMinutes(30)).block();
+        sessionStore.saveIdToken(id, "eyJ.id.token." + id, Duration.ofMinutes(30)).block();
         return id;
     }
 

@@ -46,7 +46,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "AUTH_DB_PASSWORD=unused",
-        "spring.flyway.locations=classpath:db/migration,classpath:db/seed"
+        "spring.flyway.locations=classpath:db/migration,classpath:db/seed",
+        "springdoc.api-docs.enabled=true"
 })
 @AutoConfigureMockMvc
 @Testcontainers
@@ -261,6 +262,26 @@ class AdminApiIntegrationTest {
         perform(patch("/api/v1/admin/users/admin.globale"), globalAdmin(), """
                 {"active":false}""")
                 .andExpect(status().isForbidden());
+    }
+
+    // --- Definizione OpenAPI generata dal codice ---
+
+    @Test
+    void openApiDefinitionDescribesOnlyTheAdminApiBehindTheBff() throws Exception {
+        mvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.openapi").value(org.hamcrest.Matchers.startsWith("3.")))
+                .andExpect(jsonPath("$.servers[0].url").value("http://localhost:8080"))
+                .andExpect(jsonPath("$.components.securitySchemes.sessionCookie.in").value("cookie"))
+                .andExpect(jsonPath("$.components.securitySchemes.sessionCookie.name").value("SESSION_ID"))
+                .andExpect(jsonPath("$.paths", hasKey("/api/v1/admin/tenants/{tenant}/users/{username}/roles")))
+                .andExpect(jsonPath("$.paths", not(hasKey("/api/v1/auth/enrich"))))
+                // il principal (@AuthenticationPrincipal) non deve comparire come parametro
+                .andExpect(jsonPath("$.paths['/api/v1/admin/roles'].post.parameters").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.AuditEntry.properties", hasKey("before_state")))
+                .andExpect(jsonPath("$.components.schemas.RoleCreateRequest.required", hasItem("code")));
+
+        mvc.perform(get("/v3/api-docs.yaml")).andExpect(status().isOk());
     }
 
     // --- Supporto ---
