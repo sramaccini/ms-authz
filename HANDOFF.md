@@ -6,9 +6,17 @@ L'utente è Simone. Lavora in italiano, tono tecnico.
 
 ## Stato
 
-- Creati due progetti Maven indipendenti: `auth-service/` (porta 8081) e `bff-gateway/` (porta 8080),
-  più `docker-compose.yml` (Postgres 17, Redis 7.4, Keycloak 26 su 8180).
-- 2026-10-27: `mvn clean verify` con JDK 25 OK su entrambi i progetti (test unitari 6/6 e 5/5).
+- Tre progetti Maven autonomi, compilati insieme dall'aggregatore `pom.xml` nella radice
+  (`mvn install` dalla radice, nell'ordine giusto):
+  - `session-starter/`: starter per i servizi di dominio (X-Session-ID -> Redis + cache L1 Caffeine 5 s);
+  - `auth-service/` (porta 8081): RBAC, `/api/v1/auth/enrich` (JWT) e API di amministrazione `/api/v1/admin/**`;
+  - `bff-gateway/` (porta 8080): login OIDC, sessioni, gateway, rate limiting, revoca sessioni.
+  Più `docker-compose.yml` (Postgres 17, Redis 7.4, Keycloak 26 su 8180).
+- 2026-10-27: 65 test verdi (`mvn install` dalla radice): starter 10, auth-service 27, BFF 28, compresi i test
+  di integrazione su Postgres e Redis reali con Testcontainers (serve Docker).
+- 2026-10-27: amministrazione RBAC verificata end-to-end tramite il BFF con login OIDC reale (script curl):
+  ambito per tenant, escalation bloccata, ruoli solo al globale, audit filtrato per tenant, effetto al login
+  successivo, revoca sessioni per tenant e globale. Contratto per la SPA: `docs/openapi-admin.yaml`.
 - 2026-10-27: **verificato end-to-end in locale** (docker compose + realm importato da `keycloak/import/`,
   valori di test in `.env`). Tutte le parti "a rischio" della prima stesura (starter Boot 4, Spring Cloud
   2025.1.2, prefisso rotte `server.webflux`, `JsonMapper` Jackson 3, DSL Security 7, authorized client
@@ -20,7 +28,8 @@ L'utente è Simone. Lavora in italiano, tono tecnico.
   - sessione assente/inesistente → 401; `/enrich` senza token → 401;
   - logout → chiave Redis eliminata, cookie scaduto, `/bff/session` → 401; nuovo login revoca la sessione
     precedente (anti session-fixation).
-- La specifica è in `docs/`. Repository git locale su `master` (nessun remote), `.env` escluso.
+- La specifica è in `docs/`. Repository git su `master`, remote `origin` = github.com/sramaccini/ms-authz,
+  `.env` escluso. Commit solo a nome dell'utente (s.ramaccini@gmail.com), senza attribuzione a Claude.
 
 ## Ambiente di questa macchina
 
@@ -29,6 +38,8 @@ L'utente è Simone. Lavora in italiano, tono tecnico.
 - `TEMP` è in formato corto 8.3 (`SRAMAC~1`): il JDK non riesce a creare lì il socket AF_UNIX del
   selector NIO e Tomcat/Netty non partono (`Unable to establish loopback connection`). Avviare i servizi con
   `"-Dspring-boot.run.jvmArguments=-Djdk.net.unixdomain.tmpdir=C:\tmp\ud"` (cartella già creata).
+  Anche i test (Lettuce/Netty) ne hanno bisogno: `export JAVA_TOOL_OPTIONS='-Djdk.net.unixdomain.tmpdir=C:\tmp\ud'`
+  prima di `mvn install`. È un problema di questa macchina: non va messo nei pom.
 
 ## Problemi emersi dal test end-to-end
 
@@ -51,7 +62,8 @@ Ancora aperti:
 ## Decisioni prese (non cambiarle senza parlarne con l'utente)
 
 1. **Si segue la specifica, non gli snippet incollati dall'utente nella prima richiesta.** È il BFF a creare
-   la sessione su Redis; l'auth-service espone solo `POST /api/v1/auth/enrich` e non usa Redis.
+   la sessione su Redis. L'auth-service espone `POST /api/v1/auth/enrich` e, dal 2026-10-27, l'API di
+   amministrazione: per autenticarla **legge** Redis (sola lettura, tramite lo starter); non scrive mai sessioni.
 2. Nomi dalla specifica: cookie `SESSION_ID` (`HttpOnly; Secure; SameSite=Strict`), chiave Redis
    `session:<uuid>`, header verso valle solo `X-Session-ID`. Payload Redis in snake_case con date ISO-8601
    come stringhe (par. 3.4): è un contratto condiviso con i microservizi di dominio.
@@ -78,13 +90,39 @@ Ancora aperti:
     con tenant e PKCE recuperati da Redis. Il traffico normale non crea WebSession.
     Da sapere: serializzazione JDK degli attributi (default di Spring Session): un aggiornamento di versione di
     Spring Security durante un rolling deploy può far fallire i login in corso (l'utente ripete il login).
+11. **Amministrazione RBAC da frontend** (decisioni dell'utente del 2026-10-27):
+    - amministratori **delegati per tenant** (`TENANT_ADMIN`, `rbac:manage`) oltre al globale
+      (`GLOBAL_ADMIN`, `rbac:manage-global`). Il delegato gestisce utenti e assegnazioni del solo tenant della
+      propria sessione; ruoli, tenant e stato degli utenti valgono per tutti i tenant e restano al globale;
+    - il **catalogo dei permessi lo gestiscono solo gli sviluppatori** (migrazioni Flyway); i ruoli di sistema
+      (`is_system`) non sono modificabili da interfaccia;
+    - le modifiche hanno effetto **al login successivo**; per escludere subito qualcuno si revocano le sessioni.
+    Regole di sicurezza: permessi `*-global` solo in `GLOBAL_ADMIN`; il delegato non assegna né toglie ruoli che
+    li contengono; nessuno modifica la propria utenza (insieme garantiscono che resti sempre un globale);
+    lock sulla riga del tenant per le assegnazioni, `version` sui ruoli; audit in `rbac_audit` nella stessa
+    transazione. Primo amministratore globale in produzione: SQL una tantum, vedi commento in fondo a `V2`.
+    In sviluppo `spring.flyway.out-of-order` e' attivo perche' i seed hanno versioni alte (V99+).
+12. **Revoca sessioni** (par. 5): indice `user_sessions:<username>` scritto dal BFF prima della sessione;
+    `DELETE /bff/admin/users/{username}/sessions` con `session:revoke` (solo sessioni sul proprio tenant) o
+    `session:revoke-global`. Solo comandi su una chiave: compatibile con Redis Cluster.
+13. **Rate limiting del login**: 20 richieste/minuto per IP su `/bff/login`, `/oauth2/authorization/**`,
+    `/login/oauth2/code/**`, contatore su Redis condiviso tra le istanze, fail-open se Redis non risponde.
+    Dietro un load balancer configurare `server.forward-headers-strategy` solo con proxy fidato.
+14. **Starter per i servizi di dominio** (par. 4): `http.with(SessionContextConfigurer.sessionContext(), ...)`;
+    authority = permessi (`patient:read`) e ruoli (`ROLE_DOCTOR`); 401 senza sessione, 403 senza permesso,
+    503 se Redis non risponde. 401/403 scritti direttamente: con `sendError` l'error dispatch verso `/error`
+    finiva in un'altra catena e il 403 diventava 401 (bug trovato nel test end-to-end, coperto da un test HTTP).
 
 ## Prossimi passi suggeriti (in ordine)
 
-1. Test di integrazione con Testcontainers (Postgres per l'auth-service, Redis per il BFF).
-2. Rate limiting su `/bff/login` (ogni richiesta anonima crea una WebSession su Redis per 10 min).
-3. Revoca di tutte le sessioni di un utente: indice `user_sessions:<username>` + endpoint admin (par. 5).
-4. Logout anche sullo IAM (RP-initiated logout) e validazione dell'audience JWT nell'auth-service.
-5. Valutare il rinnovo del TTL su attività, con una durata massima assoluta.
-6. Libreria o starter condiviso per i microservizi di dominio: lookup su Redis + cache L1 Caffeine 5-10 s (par. 4).
-7. Dockerfile, pipeline CI, configurazione di observability.
+Fatti il 2026-10-27: test di integrazione Testcontainers, rate limiting del login, revoca sessioni per utente,
+starter per i servizi di dominio, API di amministrazione RBAC con audit e contratto OpenAPI.
+
+1. Logout anche sullo IAM (RP-initiated logout) e validazione dell'audience JWT nell'auth-service.
+2. Rete: `auth-service` e i servizi di dominio raggiungibili solo dal BFF (`X-Session-ID` è una credenziale):
+   mTLS o network policy.
+3. Dockerfile, pipeline CI (con Docker per i test Testcontainers), observability.
+4. Valutare il rinnovo del TTL su attività, con una durata massima assoluta.
+5. Retention e protezione del registro di audit (GDPR): durata di conservazione, accesso in sola lettura.
+6. Opzionali: versione reattiva dello starter (servizi WebFlux); test di contratto tra `SessionData` del BFF e
+   `SessionContext` dello starter (oggi il formato JSON è definito in due punti); date troncate ai secondi.

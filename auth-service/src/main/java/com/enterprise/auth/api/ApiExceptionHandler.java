@@ -1,5 +1,6 @@
 package com.enterprise.auth.api;
 
+import com.enterprise.auth.admin.AdminProblem;
 import com.enterprise.auth.service.TenantSelectionRequiredException;
 import com.enterprise.auth.service.UserNotAuthorizedException;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,11 @@ public class ApiExceptionHandler {
                 "L'utente opera su piu' tenant: specificare tenant_id");
         pd.setProperty("available_tenants", ex.availableTenants());
         return pd;
+    }
+
+    @ExceptionHandler(AdminProblem.class)
+    ProblemDetail adminProblem(AdminProblem ex) {
+        return problem(ex.status(), ex.code(), ex.getMessage());
     }
 
     @ExceptionHandler(AccessDeniedException.class)

@@ -8,13 +8,13 @@ import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
 
-/** Risposte di errore RFC 9457 (application/problem+json) scritte direttamente dai filtri del gateway. */
-final class ProblemResponses {
+/** Risposte di errore RFC 9457 (application/problem+json) scritte direttamente dai filtri. */
+public final class ProblemResponses {
 
     private ProblemResponses() {
     }
 
-    static Mono<Void> write(ServerHttpResponse response, HttpStatus status, String detail) {
+    public static Mono<Void> write(ServerHttpResponse response, HttpStatus status, String detail) {
         response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_PROBLEM_JSON);
         response.getHeaders().setCacheControl("no-store");

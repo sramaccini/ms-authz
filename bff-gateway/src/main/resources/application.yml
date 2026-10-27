@@ -55,6 +55,12 @@ spring:
               uri: ${CLINICAL_SERVICE_URI:http://localhost:8082}
               predicates:
                 - Path=/api/v1/clinical/**
+            # Amministrazione RBAC (auth-service), autenticata a valle con X-Session-ID.
+            # /api/v1/auth/enrich NON e' esposto: lo chiama solo il BFF durante il login.
+            - id: auth-service-admin
+              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/admin/**
           # Il SessionRelayGlobalFilter si applica a TUTTE le rotte: nessuna rotta e' pubblica per errore
 
 bff:
@@ -76,6 +82,12 @@ bff:
   auth-service:
     base-url: ${AUTH_SERVICE_URL:http://localhost:8081}
     timeout: 3s
+  # Limite per IP su /bff/login, /oauth2/authorization/**, /login/oauth2/code/** (contatore condiviso su Redis).
+  # Dietro un load balancer l'IP e' quello del proxy, a meno di server.forward-headers-strategy con proxy fidato.
+  login-rate-limit:
+    enabled: ${BFF_LOGIN_RATE_LIMIT_ENABLED:true}
+    max-requests: ${BFF_LOGIN_RATE_LIMIT_MAX:20}
+    window: ${BFF_LOGIN_RATE_LIMIT_WINDOW:1m}
 
 management:
   endpoints:

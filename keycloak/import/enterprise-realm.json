@@ -50,6 +50,28 @@
       "credentials": [
         { "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }
       ]
+    },
+    {
+      "username": "admin.tenant.a",
+      "email": "admin.tenant.a@example.org",
+      "firstName": "Admin",
+      "lastName": "Tenant A",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }
+      ]
+    },
+    {
+      "username": "admin.globale",
+      "email": "admin.globale@example.org",
+      "firstName": "Admin",
+      "lastName": "Globale",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }
+      ]
     }
   ]
 }

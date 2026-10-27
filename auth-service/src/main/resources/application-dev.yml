@@ -4,6 +4,9 @@ spring:
     password: ${AUTH_DB_PASSWORD:auth_password_dev}
   flyway:
     locations: classpath:db/migration,classpath:db/seed
+    # I seed hanno versioni alte (V100+): su un DB di sviluppo gia' popolato le nuove migrazioni di schema
+    # (V2, V3, ...) arrivano "fuori ordine". Solo in sviluppo: in produzione i seed non esistono.
+    out-of-order: true
 
 logging:
   level:
