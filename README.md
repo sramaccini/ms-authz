@@ -51,8 +51,10 @@ Variabili principali: `IAM_ISSUER_URI`, `IAM_CLIENT_ID`, `IAM_CLIENT_SECRET`, `A
 
 ## Scelte da validare prima della produzione
 
-- **Stato OAuth2 multi-istanza**: `state`/`nonce` del login sono in WebSession in memoria. Con più repliche del BFF
-  servono sticky session sul solo path di login oppure Spring Session su Redis.
+- **BFF multi-istanza**: lo stato del login OIDC (`state`/`nonce`/PKCE e tenant scelto) è in una WebSession
+  su Redis (Spring Session, chiavi `bff:login:sessions:*`, cookie `BFF_LOGIN` `SameSite=Lax`, TTL 10 min,
+  invalidata a fine login): nessuna sticky session richiesta. Ogni `GET /bff/login` anonimo crea una chiave:
+  in produzione serve rate limiting su `/bff/login` (gateway o WAF) e una policy `maxmemory` su Redis.
 - **`X-Session-ID` verso valle**: è un credenziale equivalente al cookie. Rete interna con mTLS, mai loggarlo,
   e i servizi a valle non devono essere raggiungibili dall'esterno.
 - **TTL assoluto** (30 min, no sliding): valutare il rinnovo su attività e un limite di durata massima.

@@ -1,6 +1,14 @@
 server:
   port: 8080
   shutdown: graceful
+  reactive:
+    session:
+      cookie:
+        name: BFF_LOGIN
+        http-only: true
+        secure: true
+        # Lax e non Strict: il ritorno dallo IAM e' una navigazione cross-site e il cookie deve arrivare
+        same-site: lax
 
 spring:
   application:
@@ -11,6 +19,14 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       timeout: 500ms
+  # WebSession su Redis, usata SOLO durante il login OIDC (state/nonce/PKCE e tenant scelto):
+  # il callback dello IAM puo' arrivare a qualunque istanza del BFF. Viene invalidata a fine login.
+  session:
+    timeout: ${BFF_LOGIN_SESSION_TIMEOUT:10m}
+    data:
+      redis:
+        namespace: "bff:login" # chiavi bff:login:sessions:<id>, separate dal contratto session:<id>
+        repository-type: default # scadenza via TTL, nessun keyspace event richiesto a Redis
   security:
     oauth2:
       client:

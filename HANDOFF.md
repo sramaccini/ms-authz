@@ -69,11 +69,20 @@ Ancora aperti:
 8. CSRF di Spring disabilitato. Al suo posto: SameSite=Strict + controllo `Origin` sui metodi non idempotenti
    (`bff.frontend.allowed-origins`).
 9. TTL della sessione assoluto (30 min), senza rinnovo su attività.
+10. **BFF multi-istanza** (richiesto dall'utente per resilienza e scalabilità): Spring Session su Redis
+    (`spring-boot-starter-session-data-redis`) per la sola WebSession del login OIDC. Namespace `bff:login`,
+    repository `default` (TTL Redis, niente keyspace events), timeout 10 min (`BFF_LOGIN_SESSION_TIMEOUT`),
+    cookie `BFF_LOGIN` `HttpOnly; Secure; SameSite=Lax` (Lax obbligato: il callback dello IAM è cross-site).
+    I token dello IAM restano nel repository in memoria della singola richiesta di callback e non vanno su Redis.
+    Verificato a runtime: login avviato sull'istanza A, A terminata, callback gestito da una nuova istanza B
+    con tenant e PKCE recuperati da Redis. Il traffico normale non crea WebSession.
+    Da sapere: serializzazione JDK degli attributi (default di Spring Session): un aggiornamento di versione di
+    Spring Security durante un rolling deploy può far fallire i login in corso (l'utente ripete il login).
 
 ## Prossimi passi suggeriti (in ordine)
 
 1. Test di integrazione con Testcontainers (Postgres per l'auth-service, Redis per il BFF).
-2. Stato OAuth2 multi-istanza: Spring Session su Redis oppure sticky session sul solo path di login.
+2. Rate limiting su `/bff/login` (ogni richiesta anonima crea una WebSession su Redis per 10 min).
 3. Revoca di tutte le sessioni di un utente: indice `user_sessions:<username>` + endpoint admin (par. 5).
 4. Logout anche sullo IAM (RP-initiated logout) e validazione dell'audience JWT nell'auth-service.
 5. Valutare il rinnovo del TTL su attività, con una durata massima assoluta.
