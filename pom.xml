@@ -1,22 +1,72 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    Aggregatore di build: "mvn verify" dalla radice compila e testa i tre progetti nell'ordine corretto
-    (lo starter prima dell'auth-service che lo usa). Non e' un parent: ogni modulo resta autonomo.
+    Parent e aggregatore delle librerie ms-authz.
+    "mvn install" dalla radice compila e testa librerie ed esempio. Il codice precedente (tre servizi separati)
+    e' in legacy/ e si compila solo con il profilo "legacy": mvn install -Plegacy
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.enterprise</groupId>
-    <artifactId>ms-authz</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.2</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.enterprise.authz</groupId>
+    <artifactId>ms-authz-parent</artifactId>
+    <version>2.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>ms-authz (aggregatore)</name>
+    <name>ms-authz</name>
+
+    <properties>
+        <java.version>25</java.version>
+        <swagger-annotations.version>2.2.55</swagger-annotations.version>
+    </properties>
 
     <modules>
-        <module>session-starter</module>
-        <module>auth-service</module>
-        <module>bff-gateway</module>
+        <module>authz-session</module>
+        <module>authz-rbac</module>
+        <module>authz-bff</module>
+        <module>examples/authz-demo-app</module>
     </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.enterprise.authz</groupId>
+                <artifactId>authz-session</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.enterprise.authz</groupId>
+                <artifactId>authz-rbac</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.enterprise.authz</groupId>
+                <artifactId>authz-bff</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-annotations-jakarta</artifactId>
+                <version>${swagger-annotations.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <profiles>
+        <profile>
+            <id>legacy</id>
+            <modules>
+                <module>legacy/session-starter</module>
+                <module>legacy/auth-service</module>
+                <module>legacy/bff-gateway</module>
+            </modules>
+        </profile>
+    </profiles>
 </project>

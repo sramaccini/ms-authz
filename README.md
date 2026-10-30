@@ -1,4 +1,50 @@
-# ms-auth — BFF + Auth-Service
+# ms-authz — librerie BFF + autorizzazioni
+
+Dalla versione 2.0 ms-authz è un insieme di **librerie Spring Boot da incorporare** in un'applicazione
+(per esempio un monolite modulare), non più tre servizi separati. Il codice precedente è in [legacy/](legacy/),
+fuori dal build normale (`mvn install -Plegacy` per compilarlo).
+
+| Modulo | Contenuto | Sostituisce |
+|---|---|---|
+| `authz-session` | `SessionContext` salvato in una sessione **Spring Session Data Redis** standard; filtro e `SessionContextConfigurer` per Spring Security; interfaccia `AuthorizationResolver` | `session-starter`, payload `session:<id>` scritto a mano |
+| `authz-rbac` | Modello RBAC su PostgreSQL, risoluzione in-process al login, API `/api/v1/admin/**`, migrazioni Flyway con history propria (`authz_schema_history`) | `auth-service` |
+| `authz-bff` | Login OIDC (servlet), `/bff/login`, `/bff/session`, `/bff/logout`, revoca `/bff/admin/users/{username}/sessions`, controllo `Origin`, rate limiting del login | `bff-gateway` |
+| `examples/authz-demo-app` | Un solo deployable che assembla le tre librerie | i tre servizi |
+
+Spring Boot 4.1.2, Java 25. `mvn install` dalla radice compila e testa librerie ed esempio.
+
+## Integrazione in un'applicazione
+
+```java
+http.with(BffConfigurer.bff(), Customizer.withDefaults())
+    .authorizeHttpRequests(auth -> RbacAdminSecurity.adminApi(auth
+            .requestMatchers(BffControllers.PUBLIC_PATHS).permitAll())
+        .anyRequest().authenticated());
+// nelle API: @PreAuthorize("hasAuthority('patient:read')"), @AuthenticationPrincipal SessionContext session
+```
+
+Configurazione completa in `examples/authz-demo-app/src/main/resources/application.yml`.
+
+## Cosa cambia rispetto alla versione a servizi
+
+- **Sessione standard**: Spring Session su Redis (`repository-type: indexed`) al posto del session store scritto a
+  mano. Cookie, timeout e namespace sono proprietà standard (`server.servlet.session.*`, `spring.session.*`).
+- **Revoca** con l'indice per username di Spring Session (`FindByIndexNameSessionRepository`), al posto di
+  `user_sessions:<username>`. Effetto immediato, senza la cache L1 di 5 s.
+- **Niente `X-Session-ID` e niente gateway**: BFF e API sono nello stesso processo, nessuna credenziale viaggia
+  sulla rete interna. `/enrich` non è più un endpoint HTTP: il BFF chiama l'RBAC in-process.
+- **Cookie `SameSite=Lax`** (prima `Strict`): con un solo cookie di sessione, `Strict` lo farebbe perdere al
+  ritorno dallo IAM. Le scritture restano protette dal controllo `Origin`.
+- **Durata**: timeout di inattività scorrevole (30 min nell'esempio) più una scadenza assoluta
+  (`authz.bff.session.absolute-timeout`, 10 h), al posto dei 30 min assoluti.
+- **Non ancora portato**: test di integrazione con Testcontainers, export della definizione OpenAPI nel build,
+  sessione degli altri servizi che leggevano `session:<id>` da Redis.
+
+---
+
+# Versione precedente (legacy/)
+
+## ms-auth — BFF + Auth-Service
 
 Implementazione della *Specifica Architetturale: Pattern BFF con Session Store e Microservizio di Autorizzazione*.
 

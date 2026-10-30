@@ -1,0 +1,11 @@
+# Sviluppo locale: dati demo (utenti e tenant allineati al realm Keycloak importato) e cookie anche su http
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false
+authz:
+  rbac:
+    flyway:
+      locations: classpath:db/authz/migration,classpath:db/authz/seed
+      out-of-order: true

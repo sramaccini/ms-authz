@@ -6,6 +6,15 @@ L'utente è Simone. Lavora in italiano, tono tecnico.
 
 ## Stato
 
+**2026-10-30 — branch `feature/librerie`**: il progetto diventa un insieme di librerie da incorporare
+(`authz-session`, `authz-rbac`, `authz-bff`, esempio `examples/authz-demo-app`), su richiesta dell'utente:
+riuso da piu' applicazioni (prima consumatrice: OpenDevTrack, monolite Spring Modulith), sessioni su Redis
+tramite Spring Session standard. Il codice precedente e' in `legacy/`, da riprendere in futuro. Build: Spring Boot
+4.1.2, `mvn install` dalla radice, 10 test unitari verdi; non ancora provato end-to-end con Keycloak, Redis e
+PostgreSQL. Le decisioni sotto valgono per `legacy/`; per le librerie vedi il README (sezione "Cosa cambia").
+
+### Stato della versione legacy
+
 - Tre progetti Maven autonomi, compilati insieme dall'aggregatore `pom.xml` nella radice
   (`mvn install` dalla radice, nell'ordine giusto):
   - `session-starter/`: starter per i servizi di dominio (X-Session-ID -> Redis + cache L1 Caffeine 5 s);

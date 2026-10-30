@@ -1,0 +1,67 @@
+server:
+  port: 8080
+  shutdown: graceful
+  servlet:
+    session:
+      # Timeout di inattivita' (scorrevole); la durata massima assoluta e' authz.bff.session.absolute-timeout
+      timeout: 30m
+      cookie:
+        name: SESSION_ID
+        http-only: true
+        secure: true
+        # Lax e non Strict: lo stesso cookie deve arrivare al ritorno dallo IAM, che e' una navigazione cross-site.
+        # Le scritture restano protette dal controllo Origin del BFF.
+        same-site: lax
+
+spring:
+  application:
+    name: authz-demo-app
+  datasource:
+    url: ${AUTH_DB_URL:jdbc:postgresql://localhost:5432/auth_db}
+    username: ${AUTH_DB_USER:auth_user}
+    password: ${AUTH_DB_PASSWORD:auth_password_dev}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 500ms
+  session:
+    redis:
+      namespace: "authz"
+      # indexed: indice per username, usato dalla revoca delle sessioni (FindByIndexNameSessionRepository)
+      repository-type: indexed
+  flyway:
+    enabled: false # nessuna migrazione dell'applicazione demo; lo schema RBAC lo applica authz-rbac
+  security:
+    oauth2:
+      client:
+        registration:
+          iam:
+            provider: iam
+            client-id: ${IAM_CLIENT_ID:bff-gateway}
+            client-secret: ${IAM_CLIENT_SECRET}
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope: openid,profile,email
+        provider:
+          iam:
+            issuer-uri: ${IAM_ISSUER_URI:http://localhost:8180/realms/enterprise}
+            user-name-attribute: preferred_username
+
+authz:
+  bff:
+    frontend:
+      login-success-url: ${FRONTEND_URL:http://localhost:4200}/
+      login-failure-url: ${FRONTEND_URL:http://localhost:4200}/login-error
+      post-logout-url: ${FRONTEND_URL:http://localhost:4200}/
+      allowed-origins:
+        - ${FRONTEND_URL:http://localhost:4200}
+    session:
+      absolute-timeout: 10h
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
