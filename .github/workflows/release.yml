@@ -42,9 +42,13 @@ jobs:
       - name: GitHub Release
         run: |
           awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on {print}' CHANGELOG.md > notes.md
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md \
-            authz-session/target/authz-session-"$VERSION"*.jar \
-            authz-rbac/target/authz-rbac-"$VERSION"*.jar \
-            authz-bff/target/authz-bff-"$VERSION"*.jar
+          JARS="authz-session/target/authz-session-$VERSION*.jar authz-rbac/target/authz-rbac-$VERSION*.jar authz-bff/target/authz-bff-$VERSION*.jar"
+          # Tag ripubblicato: la release esiste gia', se ne aggiornano note e jar
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --draft=false --latest
+            gh release upload "$GITHUB_REF_NAME" $JARS --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --latest $JARS
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
