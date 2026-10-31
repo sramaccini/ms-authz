@@ -23,6 +23,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * Autentica la richiesta con il {@link SessionContext} della sessione HTTP.
  * Sessione assente: la richiesta prosegue non autenticata (Spring Security risponde 401).
  * Sessione oltre la scadenza assoluta: invalidata. Session store non raggiungibile: 503.
+ * Gira anche negli error dispatch (verso /error) e negli async dispatch (stream di eventi, Callable): senza, la
+ * regola di autorizzazione li vedrebbe non autenticati e un 404 o una risposta asincrona diventerebbero 401.
  */
 public class SessionContextFilter extends OncePerRequestFilter {
 
@@ -55,6 +57,22 @@ public class SessionContextFilter extends OncePerRequestFilter {
             contextHolder.setContext(context);
         });
         chain.doFilter(request, response);
+    }
+
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        return false;
+    }
+
+    @Override
+    protected void doFilterNestedErrorDispatch(HttpServletRequest request, HttpServletResponse response,
+            FilterChain chain) throws ServletException, IOException {
+        doFilterInternal(request, response, chain);
     }
 
     private Optional<SessionContext> current(HttpServletRequest request) {

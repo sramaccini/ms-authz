@@ -108,6 +108,20 @@ class BffContractTest {
         assertThat(r.headers().firstValue("X-Permissions-Version")).isPresent();
     }
 
+    @Test
+    void percorsoInesistenteConSessione404() throws Exception {
+        signIn();
+        assertThat(send("GET", "/api/inesistente", null).statusCode()).isEqualTo(404);
+    }
+
+    @Test
+    void rispostaAsincronaConSessione() throws Exception {
+        signIn();
+        HttpResponse<String> r = send("GET", "/api/async", null);
+        assertThat(r.statusCode()).isEqualTo(200);
+        assertThat(r.body()).isEqualTo("ok");
+    }
+
     // --- Login ---
 
     @Test
@@ -341,6 +355,12 @@ class BffContractTest {
                         "Anna Bianchi", r.email(), r.tenantId(), r.tenants(), r.roles(), r.permissions(),
                         now, now.plusSeconds(3600)));
                 return org.springframework.http.ResponseEntity.noContent().build();
+            }
+
+            /** Risposta completata con un async dispatch, come gli stream di eventi. */
+            @GetMapping("/api/async")
+            java.util.concurrent.Callable<String> async() {
+                return () -> "ok";
             }
         }
     }

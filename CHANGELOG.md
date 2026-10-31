@@ -2,6 +2,15 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [Semantic Versioning](https://semver.org/lang/it/).
 
+## [Non rilasciato]
+
+### Corretto
+
+- Con una sessione valida, un percorso inesistente rispondeva `401` invece di `404`, e una risposta asincrona (stream
+  di eventi, `Callable`) su un percorso autenticato finiva in `401`: `SessionContextFilter` non girava negli error
+  dispatch (verso `/error`) e negli async dispatch. Segnalato da Quadrava: il suo runtime legge ogni `401` come
+  sessione scaduta e rifà il login in ciclo.
+
 ## [2.0.0] - 2026-10-31
 
 Coordinate Maven `com.logicwarez.authz:authz-session|authz-rbac|authz-bff:2.0.0`, package Java
