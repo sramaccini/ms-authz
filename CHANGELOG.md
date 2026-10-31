@@ -2,6 +2,16 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [Semantic Versioning](https://semver.org/lang/it/).
 
+## [Non rilasciato]
+
+### Corretto
+
+- Una sessione Redis scritta da un'altra versione (classi rinominate, come `it.logicware.authz` → `com.logicwarez.authz`,
+  o un altro `serialVersionUID` di `SessionContext`) faceva rispondere `500` a ogni richiesta dell'utente. Ora
+  `authz-session` registra `springSessionDefaultRedisSerializer` (`TolerantSessionSerializer`): l'attributo
+  illeggibile è ignorato e la sessione conta come assente (`401`, o un nuovo login su `/bff/login`). Si disattiva
+  definendo un proprio bean con quel nome. Segnalato da Quadrava.
+
 ## [2.0.1] - 2026-10-31
 
 ### Corretto
