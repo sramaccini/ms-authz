@@ -2,7 +2,7 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [Semantic Versioning](https://semver.org/lang/it/).
 
-## [Non rilasciato]
+## [2.0.1] - 2026-10-31
 
 ### Corretto
 

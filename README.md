@@ -42,12 +42,12 @@ Nel `pom.xml` dell'applicazione:
     <dependency>
         <groupId>com.logicwarez.authz</groupId>
         <artifactId>authz-bff</artifactId>   <!-- porta con se' authz-session -->
-        <version>2.0.0</version>
+        <version>2.0.1</version>
     </dependency>
     <dependency>
         <groupId>com.logicwarez.authz</groupId>
         <artifactId>authz-rbac</artifactId>  <!-- facoltativo: RBAC su PostgreSQL -->
-        <version>2.0.0</version>
+        <version>2.0.1</version>
     </dependency>
 </dependencies>
 ```
@@ -157,7 +157,7 @@ mvn install            # build e test di librerie ed esempio (i test non richied
 
 ```bash
 set -a; . ./.env; set +a
-IAM_CLIENT_SECRET="$BFF_CLIENT_SECRET" java -jar examples/authz-demo-app/target/authz-demo-app-2.0.0.jar --spring.profiles.active=dev
+IAM_CLIENT_SECRET="$BFF_CLIENT_SECRET" java -jar examples/authz-demo-app/target/authz-demo-app-2.0.1.jar --spring.profiles.active=dev
 ```
 
 Utenti demo (password `DEMO_USER_PASSWORD` di `.env`): `mario.rossi` (TENANT_A), `anna.bianchi` (TENANT_A e
