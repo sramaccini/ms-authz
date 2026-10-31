@@ -6,7 +6,7 @@ L'utente è Simone. Lavora in italiano, tono tecnico.
 
 ## Stato
 
-**2026-10-31 — 2.0.0.** Repository github.com/sramaccini/authz-library, branch `master`. Le librerie
+**2026-10-31 — 3.0.0** (2.0.0 uguale ma con groupId e package `com.enterprise.authz`). Repository github.com/sramaccini/authz-library, branch `master`. Le librerie
 (`authz-session`, `authz-rbac`, `authz-bff`, esempio `examples/authz-demo-app`) hanno sostituito i servizi della 1.x,
 eliminati su indicazione dell'utente (erano in `legacy/`; restano nella storia git fino al commit `0074f15`).
 
@@ -66,7 +66,7 @@ ignorate (la revoca rispondeva sempre `501`); si usano `spring.session.data.redi
 12. **Logout sullo IAM** (RP-initiated, `id_token_hint`): l'ID token resta in sessione, access e refresh token no.
 13. **Rate limiting del login**: per IP, contatore su Redis, fail-open.
 14. **Distribuzione**: GitHub Packages (Maven) dal workflow `release.yml` su tag `vX.Y.Z` uguale alla versione dei
-    pom; l'esempio non si pubblica. groupId `com.enterprise.authz`.
+    pom; l'esempio non si pubblica. groupId e package Java `it.logicware.authz` (dalla 3.0.0, decisione dell'utente).
 
 ## Prossimi passi suggeriti
 

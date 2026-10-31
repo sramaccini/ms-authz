@@ -2,6 +2,19 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [Semantic Versioning](https://semver.org/lang/it/).
 
+## [3.0.0] - 2026-10-31
+
+### Modificato
+
+- **groupId e package Java** da `com.enterprise.authz` a `it.logicware.authz`. Nessun'altra differenza rispetto
+  alla 2.0.0. Per passare alla 3.0.0:
+  - dipendenze Maven: `it.logicware.authz:authz-session|authz-rbac|authz-bff:3.0.0`;
+  - import Java: `com.enterprise.authz.` → `it.logicware.authz.` (per esempio
+    `it.logicware.authz.bff.BffConfigurer`, `it.logicware.authz.session.SessionContext`);
+  - l'attributo di sessione del contesto è il nome della classe (`SessionContext.ATTRIBUTE`): le sessioni aperte
+    con la 2.0.0 non vengono riconosciute e gli utenti rifanno il login.
+- La 2.0.0 (`com.enterprise.authz`) resta pubblicata ma non verrà aggiornata.
+
 ## [2.0.0] - 2026-10-31
 
 Prima release delle librerie: ms-authz non è più un insieme di servizi (BFF gateway, auth-service, starter con
