@@ -14,26 +14,35 @@ import java.util.UUID;
 @Repository
 public class AuthorizationRepository {
 
-    public record ActiveUser(UUID id, String username, String email) {
+    /** @param lastTenantId tenant dell'ultima sessione, null se mai registrato */
+    public record ActiveUser(UUID id, String username, String email, String lastTenantId) {
     }
 
-    public record GrantRow(String tenantId, String roleCode, String permissionCode) {
+    /** @param tenantLabel descrizione del tenant, null se assente */
+    public record GrantRow(String tenantId, String tenantLabel, String roleCode, String permissionCode) {
     }
 
     private static final String FIND_ACTIVE_USER = """
-            SELECT id, username, email
+            SELECT id, username, email, last_tenant_id
               FROM app_user
              WHERE username = :username
                AND is_active = TRUE
             """;
 
     private static final String FIND_GRANTS = """
-            SELECT ur.tenant_id, r.role_code, p.permission_code
+            SELECT ur.tenant_id, t.description AS tenant_label, r.role_code, p.permission_code
               FROM user_role ur
               JOIN app_role r             ON r.id = ur.role_id
+              LEFT JOIN tenant t           ON t.code = ur.tenant_id
               LEFT JOIN role_permission rp ON rp.role_id = r.id
               LEFT JOIN app_permission p   ON p.id = rp.permission_id
              WHERE ur.user_id = :userId
+            """;
+
+    private static final String UPDATE_LAST_TENANT = """
+            UPDATE app_user SET last_tenant_id = :tenant
+             WHERE id = :userId
+               AND last_tenant_id IS DISTINCT FROM :tenant
             """;
 
     private final JdbcClient jdbc;
@@ -48,7 +57,8 @@ public class AuthorizationRepository {
                 .query((rs, n) -> new ActiveUser(
                         rs.getObject("id", UUID.class),
                         rs.getString("username"),
-                        rs.getString("email")))
+                        rs.getString("email"),
+                        rs.getString("last_tenant_id")))
                 .optional();
     }
 
@@ -57,8 +67,17 @@ public class AuthorizationRepository {
                 .param("userId", userId)
                 .query((rs, n) -> new GrantRow(
                         rs.getString("tenant_id"),
+                        rs.getString("tenant_label"),
                         rs.getString("role_code"),
                         rs.getString("permission_code")))
                 .list();
+    }
+
+    /** Ricorda il tenant della sessione: al login successivo l'utente rientra su questo. */
+    public void updateLastTenant(UUID userId, String tenant) {
+        jdbc.sql(UPDATE_LAST_TENANT)
+                .param("userId", userId)
+                .param("tenant", tenant)
+                .update();
     }
 }

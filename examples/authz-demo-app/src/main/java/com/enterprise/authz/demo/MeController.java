@@ -16,7 +16,7 @@ public class MeController {
     }
 
     @GetMapping("/api/v1/patients")
-    @PreAuthorize("hasAuthority('patient:read')")
+    @PreAuthorize("hasAuthority('clinical.patient.read')")
     public String patients() {
         return "[]";
     }

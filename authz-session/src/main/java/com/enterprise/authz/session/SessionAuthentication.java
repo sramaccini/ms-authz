@@ -9,8 +9,8 @@ import java.util.stream.Stream;
 
 /**
  * Utente autenticato tramite la sessione del BFF.
- * Authority: i permessi cosi' come sono (es. "patient:read") e i ruoli con prefisso "ROLE_",
- * quindi hasAuthority('patient:read') e hasRole('DOCTOR') funzionano entrambi.
+ * Authority: i permessi cosi' come sono (es. "clinical.patient.read") e i ruoli con prefisso "ROLE_",
+ * quindi hasAuthority('clinical.patient.read') e hasRole('DOCTOR') funzionano entrambi.
  */
 public class SessionAuthentication extends AbstractAuthenticationToken {
 

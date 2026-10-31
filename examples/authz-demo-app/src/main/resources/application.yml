@@ -1,6 +1,10 @@
 server:
   port: 8080
   shutdown: graceful
+  # Dietro un proxy fidato (per esempio l'immagine runtime di Quadrava con QUADRAVA_BFF_URL): X-Forwarded-Host e
+  # X-Forwarded-Proto danno l'indirizzo pubblico al callback del login e alla verifica della pagina di ritorno.
+  # Senza proxy davanti, o con un proxy non fidato, toglierlo: i client potrebbero falsificare quegli header.
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:framework}
   servlet:
     session:
       # Timeout di inattivita' (scorrevole); la durata massima assoluta e' authz.bff.session.absolute-timeout
@@ -16,6 +20,10 @@ server:
 spring:
   application:
     name: authz-demo-app
+  mvc:
+    async:
+      # Stream di eventi (text/event-stream, data source "live" di Quadrava): nessun limite di durata
+      request-timeout: -1
   datasource:
     url: ${AUTH_DB_URL:jdbc:postgresql://localhost:5432/auth_db}
     username: ${AUTH_DB_USER:auth_user}
@@ -27,10 +35,12 @@ spring:
       password: ${REDIS_PASSWORD:}
       timeout: 500ms
   session:
-    redis:
-      namespace: "authz"
-      # indexed: indice per username, usato dalla revoca delle sessioni (FindByIndexNameSessionRepository)
-      repository-type: indexed
+    # Boot 4: spring.session.data.redis.* (le vecchie spring.session.redis.* sono ignorate)
+    data:
+      redis:
+        namespace: "authz"
+        # indexed: indice per username, usato dalla revoca delle sessioni (FindByIndexNameSessionRepository)
+        repository-type: indexed
   flyway:
     enabled: false # nessuna migrazione dell'applicazione demo; lo schema RBAC lo applica authz-rbac
   security:

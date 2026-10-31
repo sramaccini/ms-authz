@@ -31,15 +31,5 @@ services:
     ports:
       - "8180:8180"
 
-  # Documentazione dell'API di amministrazione: http://localhost:8090
-  # Legge la definizione generata dal codice (auth-service avviato con il profilo dev, GET /v3/api-docs).
-  # Solo consultazione: il "Try it out" non funziona perche' il BFF non ammette chiamate da un'altra origine.
-  swagger-ui:
-    image: swaggerapi/swagger-ui:v5.17.14
-    environment:
-      URL: http://localhost:8081/v3/api-docs
-    ports:
-      - "8090:8080"
-
 volumes:
   pgdata:

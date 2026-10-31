@@ -17,7 +17,7 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepo
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @EnableConfigurationProperties(BffProperties.class)
 @Import({BffControllers.LoginController.class, BffControllers.SessionController.class,
-        BffControllers.SessionAdminController.class})
+        BffControllers.SessionAdminController.class, AuthzController.class})
 public class BffAutoConfiguration {
 
     @Bean
@@ -26,8 +26,13 @@ public class BffAutoConfiguration {
     }
 
     @Bean
-    LoginSupport.OriginPolicy originPolicy(BffProperties properties) {
-        return new LoginSupport.OriginPolicy(properties);
+    LoginSupport.Origins origins(BffProperties properties) {
+        return new LoginSupport.Origins(properties);
+    }
+
+    @Bean
+    LoginSupport.OriginPolicy originPolicy(LoginSupport.Origins origins) {
+        return new LoginSupport.OriginPolicy(origins);
     }
 
     @Bean

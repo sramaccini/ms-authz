@@ -32,7 +32,7 @@ import java.util.TreeSet;
  * Amministrazione RBAC con le regole di sicurezza:
  * - l'amministratore delegato opera solo sul tenant della propria sessione;
  * - ruoli, tenant e stato degli utenti sono riservati all'amministratore globale (valgono per tutti i tenant);
- * - i permessi "-global" stanno solo nei ruoli di sistema e un amministratore delegato non puo' assegnare
+ * - i permessi con azione "...global" stanno solo nei ruoli di sistema e un amministratore delegato non puo' assegnare
  *   ne' togliere ruoli che li contengono: nessuna promozione ad amministratore globale;
  * - nessuno modifica la propria utenza: insieme alla regola precedente garantisce che resti sempre
  *   almeno un amministratore globale;
@@ -44,7 +44,8 @@ import java.util.TreeSet;
 public class RbacAdminService {
 
     private static final Logger log = LoggerFactory.getLogger(RbacAdminService.class);
-    private static final String GLOBAL_SUFFIX = "-global";
+    /** Azione dei permessi riservati a GLOBAL_ADMIN (authz.rbac.manageglobal, authz.session.revokeglobal). */
+    private static final String GLOBAL_SUFFIX = "global";
     private static final int MAX_PAGE = 200;
 
     private final RbacAdminRepository repository;

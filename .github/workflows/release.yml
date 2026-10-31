@@ -1,0 +1,50 @@
+# Release: al push di un tag vX.Y.Z uguale alla versione dei pom, build e test, pubblicazione delle librerie
+# (authz-session, authz-rbac, authz-bff e il parent) su GitHub Packages e GitHub Release con le note del CHANGELOG.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Tag uguale alla versione dei pom
+        run: |
+          VERSION=$(mvn -B -q help:evaluate -Dexpression=project.version -DforceStdout)
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Il tag $GITHUB_REF_NAME non corrisponde alla versione dei pom ($VERSION)"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Build, test e pubblicazione su GitHub Packages
+        run: mvn -B deploy
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: GitHub Release
+        run: |
+          awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on {print}' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md \
+            authz-session/target/authz-session-"$VERSION"*.jar \
+            authz-rbac/target/authz-rbac-"$VERSION"*.jar \
+            authz-bff/target/authz-bff-"$VERSION"*.jar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

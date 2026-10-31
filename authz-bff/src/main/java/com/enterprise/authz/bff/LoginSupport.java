@@ -1,9 +1,14 @@
 package com.enterprise.authz.bff;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.enterprise.authz.session.AuthorizationResolver;
 import com.enterprise.authz.session.SessionContext;
@@ -33,6 +38,7 @@ public final class LoginSupport {
 
     /** Attributi di sessione riservati al BFF. */
     static final String TENANT_HINT = "authz.bff.tenant";
+    static final String RETURN_TO = "authz.bff.return";
     static final String ID_TOKEN = "authz.bff.id_token";
 
     private LoginSupport() {
@@ -56,7 +62,57 @@ public final class LoginSupport {
         }
     }
 
-    /** Redirect verso URL del frontend fissi da configurazione (nessun open redirect). */
+    /**
+     * Origini delle applicazioni servite dal BFF: quelle configurate (authz.bff.frontend.allowed-origins) piu'
+     * l'origine pubblica del BFF stesso, per le pagine servite sullo stesso indirizzo (per esempio dall'immagine
+     * runtime di Quadrava). Dietro un proxy l'origine pubblica richiede server.forward-headers-strategy=framework.
+     */
+    public static class Origins {
+
+        private final Set<String> allowed;
+
+        public Origins(BffProperties properties) {
+            this.allowed = properties.frontend().allowedOrigins().stream()
+                    .map(o -> o.replaceAll("/+$", "").toLowerCase(Locale.ROOT))
+                    .collect(Collectors.toUnmodifiableSet());
+        }
+
+        public boolean isApplication(String origin, HttpServletRequest request) {
+            if (origin == null) {
+                return false;
+            }
+            String normalized = origin.toLowerCase(Locale.ROOT);
+            return allowed.contains(normalized) || normalized.equals(own(request));
+        }
+
+        /** L'indirizzo, se e' un URL http(s) assoluto senza credenziali in una delle origini delle applicazioni. */
+        public Optional<String> applicationUrl(String url, HttpServletRequest request) {
+            try {
+                URI uri = new URI(url);
+                String scheme = uri.getScheme() == null ? null : uri.getScheme().toLowerCase(Locale.ROOT);
+                if (!("http".equals(scheme) || "https".equals(scheme)) || uri.getHost() == null
+                        || uri.getRawUserInfo() != null) {
+                    return Optional.empty();
+                }
+                return isApplication(origin(scheme, uri.getHost(), uri.getPort()), request)
+                        ? Optional.of(uri.toString()) : Optional.empty();
+            } catch (URISyntaxException e) {
+                return Optional.empty();
+            }
+        }
+
+        private static String own(HttpServletRequest request) {
+            return origin(request.getScheme(), request.getServerName(), request.getServerPort());
+        }
+
+        private static String origin(String scheme, String host, int port) {
+            boolean defaultPort = port == -1 || ("http".equalsIgnoreCase(scheme) && port == 80)
+                    || ("https".equalsIgnoreCase(scheme) && port == 443);
+            return (scheme + "://" + host + (defaultPort ? "" : ":" + port)).toLowerCase(Locale.ROOT);
+        }
+    }
+
+    /** Redirect verso la pagina di ritorno gia' verificata o verso URL del frontend fissi (nessun open redirect). */
     public static class LoginRedirects {
 
         private final BffProperties.Frontend frontend;
@@ -65,8 +121,8 @@ public final class LoginSupport {
             this.frontend = properties.frontend();
         }
 
-        void toSuccess(HttpServletResponse response) throws IOException {
-            response.sendRedirect(frontend.loginSuccessUrl().toString());
+        void toSuccess(HttpServletResponse response, String returnTo) throws IOException {
+            response.sendRedirect(returnTo != null ? returnTo : frontend.loginSuccessUrl().toString());
         }
 
         void toFailure(HttpServletResponse response, LoginErrorCode error) throws IOException {
@@ -78,7 +134,8 @@ public final class LoginSupport {
     /**
      * Dopo il login OIDC: risolve ruoli e permessi in-process, salva il {@link SessionContext} nella sessione
      * (gia' rigenerata da Spring Security contro la session fixation), indicizza la sessione per username
-     * (revoca) e conserva solo l'ID token per il logout sullo IAM. Access e refresh token vengono eliminati.
+     * (revoca), conserva solo l'ID token per il logout sullo IAM e torna alla pagina indicata da /bff/login.
+     * Access e refresh token vengono eliminati.
      */
     public static class LoginSuccessHandler implements AuthenticationSuccessHandler {
 
@@ -105,7 +162,9 @@ public final class LoginSupport {
                                             Authentication authentication) throws IOException {
             HttpSession session = request.getSession();
             Object tenant = session.getAttribute(TENANT_HINT);
+            Object returnTo = session.getAttribute(RETURN_TO);
             session.removeAttribute(TENANT_HINT);
+            session.removeAttribute(RETURN_TO);
             if (!(authentication instanceof OAuth2AuthenticationToken oauth)) {
                 fail(request, response, LoginErrorCode.LOGIN_FAILED);
                 return;
@@ -133,15 +192,16 @@ public final class LoginSupport {
                 return;
             }
             Instant now = clock.instant();
-            session.setAttribute(SessionContext.ATTRIBUTE, new SessionContext(resolved.username(), resolved.email(),
-                    resolved.tenantId(), resolved.roles(), resolved.permissions(),
-                    now, now.plus(properties.session().absoluteTimeout())));
+            String name = oauth.getPrincipal().getAttribute(properties.oidc().nameClaim());
+            session.setAttribute(SessionContext.ATTRIBUTE, new SessionContext(resolved.username(), name,
+                    resolved.email(), resolved.tenantId(), resolved.tenants(), resolved.roles(),
+                    resolved.permissions(), now, now.plus(properties.session().absoluteTimeout())));
             session.setAttribute(FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME, resolved.username());
             if (oauth.getPrincipal() instanceof OidcUser oidc) {
                 session.setAttribute(ID_TOKEN, oidc.getIdToken().getTokenValue());
             }
             log.info("Sessione creata per utente={} tenant={}", resolved.username(), resolved.tenantId());
-            redirects.toSuccess(response);
+            redirects.toSuccess(response, returnTo instanceof String url ? url : null);
         }
 
         private void removeAuthorizedClient(OAuth2AuthenticationToken oauth, HttpServletRequest request,
@@ -211,16 +271,19 @@ public final class LoginSupport {
         }
     }
 
-    /** Le richieste non idempotenti sono ammesse solo da un'origine del frontend (difesa CSRF con SameSite). */
+    /**
+     * Difesa in profondita' accanto al token CSRF: una richiesta non idempotente con un header Origin estraneo
+     * alle applicazioni viene rifiutata. Senza Origin (client non browser) decide il solo token CSRF.
+     */
     public static class OriginPolicy {
 
         private static final Set<String> SAFE_METHODS =
                 Set.of(HttpMethod.GET.name(), HttpMethod.HEAD.name(), HttpMethod.OPTIONS.name());
 
-        private final Set<String> allowedOrigins;
+        private final Origins origins;
 
-        public OriginPolicy(BffProperties properties) {
-            this.allowedOrigins = Set.copyOf(properties.frontend().allowedOrigins());
+        public OriginPolicy(Origins origins) {
+            this.origins = origins;
         }
 
         public boolean isAllowed(HttpServletRequest request) {
@@ -228,7 +291,7 @@ public final class LoginSupport {
                 return true;
             }
             String origin = request.getHeader("Origin");
-            return origin != null && allowedOrigins.contains(origin);
+            return origin == null || origins.isApplication(origin, request);
         }
     }
 }

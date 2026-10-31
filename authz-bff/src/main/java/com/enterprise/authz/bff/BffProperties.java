@@ -23,9 +23,17 @@ public record BffProperties(@Valid @DefaultValue Oidc oidc,
                             @Valid @NotNull Frontend frontend,
                             @Valid @DefaultValue LoginRateLimit loginRateLimit) {
 
+    /** @param nameClaim claim con il nome completo da mostrare (campo name di /bff/user) */
     public record Oidc(@DefaultValue("iam") @NotBlank String registrationId,
-                       @DefaultValue("preferred_username") @NotBlank String usernameClaim) {
+                       @DefaultValue("preferred_username") @NotBlank String usernameClaim,
+                       @DefaultValue("name") @NotBlank String nameClaim) {
     }
+
+    /**
+     * @param loginSuccessUrl home delle applicazioni: destinazione del login senza pagina di ritorno
+     * @param allowedOrigins  origini delle applicazioni: pagine di ritorno del login e header Origin ammessi
+     *                        (l'origine pubblica del BFF e' sempre ammessa)
+     */
 
     /** @param absoluteTimeout durata massima di una sessione anche se l'utente resta attivo */
     public record Session(@DefaultValue("10h") @NotNull Duration absoluteTimeout) {

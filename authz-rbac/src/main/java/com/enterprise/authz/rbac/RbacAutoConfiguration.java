@@ -10,6 +10,7 @@ import com.enterprise.authz.rbac.repository.AuthorizationRepository;
 import com.enterprise.authz.rbac.service.AuthorizationContext;
 import com.enterprise.authz.rbac.service.AuthorizationService;
 import com.enterprise.authz.session.AuthorizationResolver;
+import com.enterprise.authz.session.SessionContext;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -40,6 +41,8 @@ public class RbacAutoConfiguration {
         return (username, tenant) -> {
             AuthorizationContext ctx = service.resolve(username, tenant);
             return new AuthorizationResolver.Resolved(ctx.username(), ctx.email(), ctx.tenantId(),
+                    ctx.availableTenants().entrySet().stream()
+                            .map(t -> new SessionContext.Tenant(t.getKey(), t.getValue())).toList(),
                     ctx.roles().stream().toList(), ctx.permissions().stream().toList());
         };
     }

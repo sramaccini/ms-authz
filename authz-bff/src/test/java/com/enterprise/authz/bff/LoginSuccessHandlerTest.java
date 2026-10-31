@@ -30,7 +30,7 @@ class LoginSuccessHandlerTest {
     private static final Instant NOW = Instant.parse("2026-10-30T10:00:00Z");
 
     private final BffProperties properties = new BffProperties(
-            new BffProperties.Oidc("iam", "preferred_username"),
+            new BffProperties.Oidc("iam", "preferred_username", "name"),
             new BffProperties.Session(Duration.ofHours(10)),
             new BffProperties.Frontend(URI.create("https://app/"), URI.create("https://app/login-error"),
                     URI.create("https://app/"), List.of("https://app")),
@@ -42,7 +42,7 @@ class LoginSuccessHandlerTest {
                 new StaticListableBeanFactory().getBeanProvider(OAuth2AuthorizedClientRepository.class),
                 new LoginSupport.LoginRedirects(properties), properties, Clock.fixed(NOW, ZoneOffset.UTC));
         var user = new DefaultOAuth2User(AuthorityUtils.NO_AUTHORITIES,
-                Map.of("preferred_username", "mario.rossi"), "preferred_username");
+                Map.of("preferred_username", "mario.rossi", "name", "Mario Rossi"), "preferred_username");
         var response = new MockHttpServletResponse();
         handler.onAuthenticationSuccess(request, response, new OAuth2AuthenticationToken(user, List.of(), "iam"));
         return response;
@@ -53,16 +53,27 @@ class LoginSuccessHandlerTest {
         var request = new MockHttpServletRequest();
         request.getSession().setAttribute(LoginSupport.TENANT_HINT, "TENANT_B");
         var response = login((u, t) -> new AuthorizationResolver.Resolved(u, "m@x.it", t,
-                List.of("DOCTOR"), List.of("patient:read")), request);
+                List.of(new SessionContext.Tenant(t, "Sede B")), List.of("DOCTOR"), List.of("clinical.patient.read")), request);
 
         SessionContext ctx = (SessionContext) request.getSession().getAttribute(SessionContext.ATTRIBUTE);
         assertThat(ctx.tenantId()).isEqualTo("TENANT_B");
-        assertThat(ctx.permissions()).containsExactly("patient:read");
+        assertThat(ctx.permissions()).containsExactly("clinical.patient.read");
         assertThat(ctx.expiresAt()).isEqualTo(NOW.plus(Duration.ofHours(10)));
         assertThat(request.getSession().getAttribute(FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME))
                 .isEqualTo("mario.rossi");
         assertThat(request.getSession().getAttribute(LoginSupport.TENANT_HINT)).isNull();
+        assertThat(ctx.name()).isEqualTo("Mario Rossi");
+        assertThat(ctx.tenants()).containsExactly(new SessionContext.Tenant("TENANT_B", "Sede B"));
         assertThat(response.getRedirectedUrl()).isEqualTo("https://app/");
+    }
+
+    @Test
+    void tornaAllaPaginaIndicataDaBffLogin() throws Exception {
+        var request = new MockHttpServletRequest();
+        request.getSession().setAttribute(LoginSupport.RETURN_TO, "https://app/board?id=7");
+        var response = login((u, t) -> new AuthorizationResolver.Resolved(u, null, "T", List.of(), List.of()), request);
+        assertThat(response.getRedirectedUrl()).isEqualTo("https://app/board?id=7");
+        assertThat(request.getSession().getAttribute(LoginSupport.RETURN_TO)).isNull();
     }
 
     @Test
@@ -83,7 +94,7 @@ class LoginSuccessHandlerTest {
 
     @Test
     void sessioneOltreLaScadenzaAssolutaNonVale() {
-        var ctx = new SessionContext("u", null, "T", List.of(), List.of(), NOW, NOW.plusSeconds(60));
+        var ctx = new SessionContext("u", null, null, "T", List.of(), List.of(), List.of(), NOW, NOW.plusSeconds(60));
         assertThat(ctx.isExpiredAt(NOW.plusSeconds(59))).isFalse();
         assertThat(ctx.isExpiredAt(NOW.plusSeconds(60))).isTrue();
     }

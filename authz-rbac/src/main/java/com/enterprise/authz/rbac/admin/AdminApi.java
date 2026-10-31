@@ -19,7 +19,7 @@ public final class AdminApi {
     static final String ROLE_CODE = "^[A-Z][A-Z0-9_]{1,99}$";
     static final String TENANT_CODE = "^[A-Za-z0-9_-]{1,50}$";
     static final String USERNAME = "^[A-Za-z0-9._@-]{1,150}$";
-    static final String PERMISSION_CODE = "^[a-z0-9_-]+:[a-z0-9_-]+$";
+    static final String PERMISSION_CODE = "^[a-z0-9]+\\.[a-z0-9]+\\.[a-z0-9]+$";
 
     private AdminApi() {
     }

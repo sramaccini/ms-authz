@@ -2,6 +2,7 @@ package com.enterprise.authz.bff;
 
 import java.io.IOException;
 
+import com.enterprise.authz.session.SessionContext;
 import com.enterprise.authz.session.SessionContextConfigurer;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -17,9 +18,14 @@ import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -30,9 +36,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *         .requestMatchers(BffControllers.PUBLIC_PATHS).permitAll()
  *         .anyRequest().authenticated());
  * </pre>
- * Login OIDC, SessionContext in Spring Session, 401 sulle chiamate senza sessione, controllo Origin sulle
- * scritture e limite di frequenza sul login. Il CSRF a token di Spring non e' attivo: la difesa e'
- * SameSite + Origin, come nella versione precedente.
+ * Login OIDC, SessionContext in Spring Session, 401 sulle chiamate senza sessione (mai redirect), CSRF per
+ * applicazioni a pagina singola (cookie XSRF-TOKEN leggibile dalla pagina, header X-XSRF-TOKEN sulle scritture),
+ * controllo Origin, header X-Permissions-Version e limite di frequenza sul login: le regole di contracts/bff.yaml
+ * di Quadrava.
  */
 public class BffConfigurer extends AbstractHttpConfigurer<BffConfigurer, HttpSecurity> {
 
@@ -49,7 +56,10 @@ public class BffConfigurer extends AbstractHttpConfigurer<BffConfigurer, HttpSec
                 .failureHandler(context.getBean(LoginSupport.LoginFailureHandler.class)));
         // API per una SPA: mai redirect alla pagina di login, sempre 401
         http.exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
-        http.csrf(csrf -> csrf.disable());
+        // spa(): token letto dall'header X-XSRF-TOKEN; il cookie XSRF-TOKEN non e' HttpOnly perche' la pagina lo legge
+        http.csrf(csrf -> csrf.spa().csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()));
+        // POST /logout e' di BffControllers (risposta JSON con l'indirizzo di logout sullo IAM)
+        http.logout(logout -> logout.disable());
     }
 
     @Override
@@ -58,6 +68,8 @@ public class BffConfigurer extends AbstractHttpConfigurer<BffConfigurer, HttpSec
         BffProperties properties = context.getBean(BffProperties.class);
         http.addFilterAfter(new OriginCheckFilter(context.getBean(LoginSupport.OriginPolicy.class)),
                 SecurityContextHolderFilter.class);
+        http.addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class);
+        http.addFilterAfter(new PermissionsVersionFilter(), CsrfFilter.class);
         if (properties.loginRateLimit().enabled()) {
             http.addFilterBefore(new LoginRateLimitFilter(context.getBeanProvider(StringRedisTemplate.class)
                     .getIfAvailable(), properties.loginRateLimit()), OAuth2AuthorizationRequestRedirectFilter.class);
@@ -90,6 +102,36 @@ public class BffConfigurer extends AbstractHttpConfigurer<BffConfigurer, HttpSec
         }
     }
 
+    /**
+     * Legge il token CSRF a ogni richiesta, cosi' il cookie XSRF-TOKEN arriva al browser gia' con la prima risposta
+     * (Spring Security lo crea solo quando qualcuno lo legge).
+     */
+    static final class CsrfCookieFilter extends OncePerRequestFilter {
+
+        @Override
+        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+                throws ServletException, IOException {
+            if (request.getAttribute(CsrfToken.class.getName()) instanceof CsrfToken token) {
+                token.getToken();
+            }
+            chain.doFilter(request, response);
+        }
+    }
+
+    /** Versione dei permessi della sessione su ogni risposta: quando cambia, la UI ricarica i permessi. */
+    static final class PermissionsVersionFilter extends OncePerRequestFilter {
+
+        @Override
+        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+                throws ServletException, IOException {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.getPrincipal() instanceof SessionContext session) {
+                response.setHeader(AuthzController.VERSION_HEADER, session.permissionsVersion());
+            }
+            chain.doFilter(request, response);
+        }
+    }
+
     /** Limite per IP sugli ingressi del login; contatore su Redis condiviso tra le istanze, fail-open. */
     static final class LoginRateLimitFilter extends OncePerRequestFilter {
 
@@ -105,7 +147,7 @@ public class BffConfigurer extends AbstractHttpConfigurer<BffConfigurer, HttpSec
 
         @Override
         protected boolean shouldNotFilter(HttpServletRequest request) {
-            String path = request.getRequestURI();
+            String path = request.getRequestURI().substring(request.getContextPath().length());
             return redis == null || !(path.equals("/bff/login") || path.startsWith("/oauth2/authorization/")
                     || path.startsWith("/login/oauth2/code/"));
         }

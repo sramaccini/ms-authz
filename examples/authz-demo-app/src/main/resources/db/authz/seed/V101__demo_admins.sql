@@ -13,8 +13,8 @@ INSERT INTO user_role (user_id, role_id, tenant_id)
 SELECT u.id, r.id, 'TENANT_A' FROM app_user u, app_role r
 WHERE u.username = 'admin.globale' AND r.role_code = 'GLOBAL_ADMIN';
 
--- Il ruolo demo ADMIN di V100 riceve tutti i permessi del catalogo: i permessi "-global" pero'
+-- Il ruolo demo ADMIN di V100 riceve tutti i permessi del catalogo: i permessi con azione "...global" pero'
 -- possono stare solo nel ruolo di sistema GLOBAL_ADMIN.
 DELETE FROM role_permission
  WHERE role_id = (SELECT id FROM app_role WHERE role_code = 'ADMIN')
-   AND permission_id IN (SELECT id FROM app_permission WHERE permission_code LIKE '%-global');
+   AND permission_id IN (SELECT id FROM app_permission WHERE permission_code LIKE '%global');
