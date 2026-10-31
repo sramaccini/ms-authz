@@ -37,7 +37,8 @@ ignorate (la revoca rispondeva sempre `501`); si usano `spring.session.data.redi
   usa un progetto compose separato con porte spostate (`docker compose -p authzlib -f docker-compose.yml -f <override>`,
   Keycloak 18180, PostgreSQL 15432, Redis 16379; `.env` con valori di test generati, gitignored).
 - Commit solo a nome dell'utente, `Simone Ramaccini <s.ramaccini@gmail.com>` (impostato nel `git config` del repo:
-  quello globale ha un altro indirizzo), senza attribuzione a Claude.
+  quello globale ha un altro indirizzo): unico autore, nessun trailer `Co-Authored-By` né altre attribuzioni, in
+  commit, tag, release, file e note.
 
 ## Decisioni prese (non cambiarle senza parlarne con l'utente)
 

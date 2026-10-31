@@ -188,7 +188,8 @@ un percorso in formato corto 8.3 dove il JDK non riesce a creare il socket AF_UN
 - **Logout IAM**: il post logout redirect URI va registrato sul client dello IAM. Il logout avviato altrove
   (un'altra applicazione, la console dello IAM) non chiude le sessioni del BFF: serve il back-channel logout (non
   incluso).
-- **Serializzazione JDK** degli attributi di sessione (default di Spring Session): un aggiornamento che cambia le
-  classi in sessione durante un rolling deploy può chiudere le sessioni aperte (l'utente rifà il login).
+- **Serializzazione JDK** degli attributi di sessione (`TolerantSessionSerializer`): un aggiornamento che cambia le
+  classi in sessione chiude le sessioni aperte, senza errori (l'attributo illeggibile è ignorato e l'utente rifà il
+  login).
 - **Non ancora portato dalla 1.x**: test di integrazione con Testcontainers (PostgreSQL, Redis) ed export della
   definizione OpenAPI nel build.
